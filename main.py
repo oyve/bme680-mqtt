@@ -4,6 +4,7 @@ import os
 import time
 import json
 import logging
+import threading
 import paho.mqtt.client as mqtt
 import bme680
 
@@ -31,7 +32,8 @@ MQTT_TOPIC_BASE = os.getenv("MQTT_TOPIC_BASE", "sensors/bme680")
 MAX_RETRY_DELAY = 300  # Maximum delay of 5 minutes
 INITIAL_RETRY_DELAY = 1  # Start with 1 second
 retry_delay = INITIAL_RETRY_DELAY
-mqtt_connected = False
+mqtt_connected = threading.Event()  # Thread-safe event for connection state
+loop_started = False  # Track if network loop has been started
 
 # Initialize BME680 sensor
 sensor = bme680.BME680(bme680.I2C_ADDR_PRIMARY)
@@ -44,18 +46,17 @@ sensor.set_filter(bme680.FILTER_SIZE_3)
 
 # MQTT callbacks
 def on_connect(client, userdata, flags, rc):
-    global mqtt_connected, retry_delay
+    global retry_delay
     if rc == 0:
         logging.info(f"Connected to MQTT broker at {MQTT_HOST}:{MQTT_PORT}")
-        mqtt_connected = True
+        mqtt_connected.set()  # Signal successful connection
         retry_delay = INITIAL_RETRY_DELAY  # Reset retry delay on successful connection
     else:
         logging.error(f"Failed to connect to MQTT broker, return code: {rc}")
-        mqtt_connected = False
+        mqtt_connected.clear()  # Signal connection failure
 
 def on_disconnect(client, userdata, rc):
-    global mqtt_connected
-    mqtt_connected = False
+    mqtt_connected.clear()  # Signal disconnection
     if rc != 0:
         logging.warning(f"Unexpected disconnection from MQTT broker, return code: {rc}")
     else:
@@ -68,18 +69,20 @@ client.on_disconnect = on_disconnect
 
 def connect_mqtt():
     """Attempt to connect to MQTT broker with exponential backoff"""
-    global retry_delay
+    global retry_delay, loop_started
     
-    while not mqtt_connected:
+    while not mqtt_connected.is_set():
         try:
             logging.info(f"Attempting to connect to MQTT broker at {MQTT_HOST}:{MQTT_PORT}")
             client.connect(MQTT_HOST, MQTT_PORT, 60)
-            client.loop_start()  # Start network loop in background thread
+            
+            # Start network loop only once
+            if not loop_started:
+                client.loop_start()  # Start network loop in background thread
+                loop_started = True
             
             # Wait a bit to see if connection succeeds
-            time.sleep(2)
-            
-            if mqtt_connected:
+            if mqtt_connected.wait(timeout=2):
                 break
             else:
                 raise ConnectionError("Connection callback not received")
@@ -97,7 +100,7 @@ connect_mqtt()
 
 def publish_reading(path, value, unit):
     """Publish sensor reading to MQTT broker"""
-    if not mqtt_connected:
+    if not mqtt_connected.is_set():
         logging.warning("Not connected to MQTT broker, skipping publish")
         return
         
@@ -115,8 +118,11 @@ def publish_reading(path, value, unit):
 try:
     while True:
         # Check if we're connected, if not, attempt to reconnect
-        if not mqtt_connected:
+        if not mqtt_connected.is_set():
             logging.warning("Lost connection to MQTT broker, attempting to reconnect...")
+            # Reconnect with exponential backoff
+            # Note: This will block sensor reads during reconnection attempts
+            # but ensures we re-establish connection before continuing
             connect_mqtt()
         
         if sensor.get_sensor_data():
