@@ -31,6 +31,7 @@ MQTT_TOPIC_BASE = os.getenv("MQTT_TOPIC_BASE", "sensors/bme680")
 # Connection retry settings
 MAX_RETRY_DELAY = 300  # Maximum delay of 5 minutes
 INITIAL_RETRY_DELAY = 1  # Start with 1 second
+CONNECTION_TIMEOUT = 2  # Timeout for connection callback in seconds
 retry_delay = INITIAL_RETRY_DELAY
 mqtt_connected = threading.Event()  # Thread-safe event for connection state
 loop_started = False  # Track if network loop has been started
@@ -82,7 +83,7 @@ def connect_mqtt():
                 loop_started = True
             
             # Wait a bit to see if connection succeeds
-            if mqtt_connected.wait(timeout=2):
+            if mqtt_connected.wait(timeout=CONNECTION_TIMEOUT):
                 break
             else:
                 raise ConnectionError("Connection callback not received")
@@ -118,11 +119,11 @@ def publish_reading(path, value, unit):
 try:
     while True:
         # Check if we're connected, if not, attempt to reconnect
+        # Note: Reconnection blocks the sensor read loop to ensure connection
+        # is re-established before attempting to publish data. This trade-off
+        # prioritizes successful data delivery over continuous sensor polling.
         if not mqtt_connected.is_set():
             logging.warning("Lost connection to MQTT broker, attempting to reconnect...")
-            # Reconnect with exponential backoff
-            # Note: This will block sensor reads during reconnection attempts
-            # but ensures we re-establish connection before continuing
             connect_mqtt()
         
         if sensor.get_sensor_data():
