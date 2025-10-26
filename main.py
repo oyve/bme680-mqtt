@@ -1,14 +1,24 @@
 #!/usr/bin/env python3
 
+import os
 import time
 import json
 import paho.mqtt.client as mqtt
 import bme680
 
-# MQTT broker settings
-MQTT_HOST = "xxx.xxx.xxx.xxxx"
-MQTT_PORT = 1883
-MQTT_TOPIC_BASE = "sensors/bme680"
+# Load configuration from environment variables
+# For local development, create a .env file based on .env.example
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # python-dotenv not installed, will use environment variables only
+    pass
+
+# MQTT broker settings from environment variables with defaults
+MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
+MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+MQTT_TOPIC_BASE = os.getenv("MQTT_TOPIC_BASE", "sensors/bme680")
 
 # Initialize BME680 sensor
 sensor = bme680.BME680(bme680.I2C_ADDR_PRIMARY)
