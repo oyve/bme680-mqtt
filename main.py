@@ -27,6 +27,7 @@ except ImportError:
 MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 MQTT_TOPIC_BASE = os.getenv("MQTT_TOPIC_BASE", "sensors/bme680")
+SENSOR_READ_INTERVAL = int(os.getenv("SENSOR_READ_INTERVAL", "10"))
 
 # Connection retry settings
 MAX_RETRY_DELAY = 300  # Maximum delay of 5 minutes
@@ -130,7 +131,7 @@ try:
             publish_reading("temperature", sensor.data.temperature, "C")
             publish_reading("pressure", sensor.data.pressure, "hPa")
             publish_reading("humidity", sensor.data.humidity, "%")
-        time.sleep(10)
+        time.sleep(SENSOR_READ_INTERVAL)
 except KeyboardInterrupt:
     logging.info("Stopped by user")
     client.loop_stop()
