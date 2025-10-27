@@ -1,6 +1,16 @@
 # bme680-mqtt
 Read a bme680 sensor and post to MQTT server
 
+## Connection Retry Mechanism
+
+The application includes a robust connection retry mechanism with exponential backoff to ensure reliable MQTT broker connectivity:
+
+- **Automatic reconnection**: The application automatically attempts to reconnect if the connection to the MQTT broker is lost
+- **Exponential backoff**: Retry attempts start at 1 second and double with each failure (1s, 2s, 4s, 8s, 16s, etc.)
+- **Maximum retry delay**: Retry delay is capped at 5 minutes (300 seconds) to prevent excessively long wait times
+- **Connection reset**: On successful connection, the retry delay is reset to the initial 1 second
+- **Blocking reconnection**: When connection is lost during operation, sensor reading is paused until the connection is re-established to ensure data delivery
+
 ## Configuration
 
 The application can be configured using environment variables. For local development, you can create a `.env` file based on the provided `.env.example`:
